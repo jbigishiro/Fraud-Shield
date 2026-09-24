@@ -1,0 +1,3 @@
+model,classifier__colsample_bytree,classifier__gamma,classifier__learning_rate,classifier__max_depth,classifier__min_child_weight,classifier__n_estimators,classifier__reg_alpha,classifier__reg_lambda,classifier__scale_pos_weight,classifier__subsample,classifier__class_weight,classifier__max_features,classifier__min_samples_leaf,classifier__min_samples_split
+xgboost_tuned,0.749816047538945,0.4753571532049581,0.1205712628744377,7,5.0,252,0.02175195311877764,0.5980887178314296,257.9162090067472,0.9464704583099741,,,,
+random_forest_tuned,,,,30,,364,,,,,balanced,0.3,2.0,4.0

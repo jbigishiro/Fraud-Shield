@@ -1,0 +1,24 @@
+# Data (too large / regenerable -- not needed to run the deployed app,
+# only to retrain; see README "Deploying to Render")
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Models: TRACKED, not ignored. The Streamlit app (app/app.py) loads these
+# at runtime, so a deployment (Render, etc.) needs them in the repo. Before
+# your first commit, check their sizes -- `du -sh models/*` -- and see the
+# README's "Deploying to Render" section if any file is too large for a
+# normal git push (GitHub hard-refuses anything over 100MB).
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

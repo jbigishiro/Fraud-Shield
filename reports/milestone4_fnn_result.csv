@@ -1,0 +1,2 @@
+model,roc_auc,pr_auc,default_threshold_precision,default_threshold_recall,default_threshold_f1,tuned_threshold,tuned_precision,tuned_recall,tuned_f1,tuned_false_positives,tuned_false_negatives
+fnn,0.99889973884676,0.956125831551505,0.3429981492905614,0.9814651368049426,0.5083428571428571,0.9925447,0.9312906220984215,0.8852603706972639,0.9076923076923077,74,130

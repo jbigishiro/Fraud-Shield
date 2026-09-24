@@ -1,0 +1,26 @@
+# Dependencies for the deployed Streamlit app ONLY (app/app.py) -- a lean
+# subset of the full requirements.txt, which also covers EDA notebooks,
+# training scripts, and the Kaggle API that a running deployment never
+# needs.
+#
+# --extra-index-url pulls torch's CPU-only build instead of the default
+# PyPI wheel, which (as of torch 2.x) pulls in several GB of NVIDIA CUDA
+# packages as dependencies even though Render's web services have no GPU.
+# This single line is the difference between a ~300MB and a multi-GB
+# deploy. See https://pytorch.org/get-started/locally/ ("CPU" + "Pip").
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+streamlit>=1.28
+pandas>=2.0
+numpy>=1.24
+joblib>=1.3
+scikit-learn>=1.3
+xgboost>=2.0
+torch>=2.1,<3
+
+# If Render's build log shows a multi-GB torch download despite the line
+# above (pip's resolver can occasionally still prefer a default-index
+# match), pin the exact CPU build instead, e.g.:
+#   torch==2.4.0+cpu
+# (drop the >=2.1,<3 line above and use that instead, matching whatever
+# CPU-tagged version currently exists at the URL above).

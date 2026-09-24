@@ -1,0 +1,20 @@
+# Render Blueprint -- https://render.com/docs/blueprint-spec
+#
+# Deploys the Streamlit app (app/app.py) as a web service. In the Render
+# dashboard: New -> Blueprint -> point at this repo -> Render reads this
+# file and proposes the service below. See README "Deploying to Render"
+# for the manual (non-Blueprint) equivalent and for things this file can't
+# capture (plan sizing, committing model files, etc.).
+services:
+  - type: web
+    name: fraud-shield
+    env: python
+    plan: starter  # 512MB RAM -- bump to "standard" (2GB) if the app OOMs
+                   # loading all 5 models (XGBoost + RF + FNN + LSTM +
+                   # meta-learner) at once; see README for how to tell.
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: streamlit run app/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2
+    autoDeploy: true
