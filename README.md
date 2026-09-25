@@ -2,6 +2,7 @@
 
 Real-time credit card fraud detection: supervised ML + deep learning models,
 combined into a hybrid framework, served through a Streamlit web app.
+The app is live on https://fraud-shield-gcxh.onrender.com.
 
 Dataset: Kaggle's [Credit Card Transactions Fraud Detection Dataset](https://www.kaggle.com/datasets/kartik2112/fraud-detection)
 (Sparkov-simulated, ~1.85M transactions, Jan 2019 – Dec 2020, ~0.58% fraud rate).
@@ -15,7 +16,7 @@ fraud-shield-ai/
 │   └── processed/    # time-based train/val/test splits + engineered features (gitignored)
 ├── notebooks/         # exploratory work (EDA)
 ├── src/               # reusable pipeline code (config, data, features, models)
-├── app/               # Streamlit web app (Milestone 5, not yet built)
+├── app/               # Streamlit web app 
 ├── models/            # saved/trained model artifacts (gitignored)
 └── reports/           # metrics CSVs, leaderboard, training histories
 ```
@@ -25,17 +26,11 @@ fraud-shield-ai/
 1. **Create a virtual environment**
    ```bash
    python -m venv venv
-   source venv/bin/activate      # Windows: venv\Scripts\activate
+   source venv/bin/activate      
    pip install -r requirements.txt
    ```
 
-2. **Get Kaggle API credentials** (optional -- only needed if you use `download_data.py`)
-   - Create a Kaggle account, then go to
-     https://www.kaggle.com/settings/account -> "Create New Token".
-   - Save the downloaded `kaggle.json` to `~/.kaggle/kaggle.json`
-     (`chmod 600 ~/.kaggle/kaggle.json` on Mac/Linux).
-
-3. **Place the dataset**
+2. **Place the dataset**
 
    Put Kaggle's `fraudTrain.csv` and `fraudTest.csv` in `data/raw/`.
 
@@ -43,14 +38,18 @@ fraud-shield-ai/
 
 ```bash
 cd src
-python data_split.py       # Milestone 1: time-based train/val/test split
-python build_features.py   # Milestone 2: feature engineering (cached to data/processed/*_features.csv)
-python train_baselines.py  # Milestone 3: LogReg, LogReg+SMOTE, Random Forest, XGBoost
-python tune_models.py      # Milestone 3b: RandomizedSearchCV for XGBoost + Random Forest
-python train_fnn.py        # Milestone 4a: PyTorch feedforward network
-python build_sequences.py  # Milestone 4b: per-card lagged sequences for the LSTM
-python train_lstm.py       # Milestone 4b: PyTorch LSTM
-python train_hybrid.py     # Milestone 4c: stacking ensemble over all four models above
+python data_split.py       
+python build_features.py   
+python train_baselines.py  
+python tune_models.py      
+python train_fnn.py        
+python build_sequences.py  
+python train_lstm.py       
+python train_hybrid.py     
+cd ../app
+streamlit run app.py      
+cd ../src
+python evaluate_final_test.py  # 
 ```
 
 Every training script writes its own result row to `reports/`, and also
@@ -174,26 +173,118 @@ would let it overfit trivially. Instead:
 This is now the project's **final chosen model** for Milestone 5 and the
 final test evaluation, unless later work changes that.
 
-## Where things stand
+## Milestone 5: Streamlit web app
 
-- [x] Milestone 1: project scaffold, train/val/test split
-- [x] Milestone 2: EDA and data preparation
-- [x] Milestone 3: baseline supervised models (LogReg, LogReg+SMOTE, Random Forest, XGBoost)
-- [x] Milestone 3b: hyperparameter tuning (XGBoost, Random Forest)
-- [x] Milestone 4a: FNN (deep learning)
-- [x] Milestone 4b: LSTM (deep learning, per-card sequences) -- best single model (PR-AUC 0.9804)
-- [x] Milestone 4c: hybrid framework (stacking ensemble) -- **best model overall (PR-AUC 0.9829)**
-- [ ] Milestone 5: Streamlit web interface (scores new transactions with the saved hybrid pipeline)
-- [ ] Milestone 6: documentation and final submission
-- [ ] Final evaluation against `fraudTest.csv` (run once, with the hybrid, once Milestone 5 is working)
+`app/app.py` loads all five saved artifacts (the four base models plus the
+hybrid meta-learner) and lets you score transactions two ways:
+
+- **Batch upload**: a CSV with the same raw columns as the Kaggle dataset
+  (`data/raw/fraudTest.csv` is a ready-made example to slice from). Shows a
+  summary (transactions scored / flagged / flagged rate), a table with each
+  row's hybrid fraud probability plus all four base-model probabilities for
+  transparency, and a CSV download of the results. If the upload includes
+  `is_fraud` (ground truth), the app also reports how many actual frauds
+  were caught -- useful for a quick sanity check, but not a substitute for
+  the one-time, untouched-until-now `fraudTest.csv` evaluation described
+  below.
+- **Manual single-transaction form**: enter one transaction's fields by
+  hand and get an immediate fraud probability and flag/no-flag verdict.
+
+**A real limitation, stated plainly rather than hidden:** three of the
+engineered features -- transaction velocity (`txn_count_1h/24h`), the
+spending-deviation z-score, and the LSTM's 5-step sequence -- depend on a
+card's own transaction history. During training that history was the full
+dataset timeline; in the app, it's only whatever's in the uploaded batch
+(or nothing, for the single-transaction form). A single uploaded row or a
+card's first-ever transactions will score with those features at their
+neutral defaults, not because the app is broken, but because there's no
+history to compute them from -- exactly the situation a production system
+would solve with a live transaction-history lookup, which is out of scope
+here. Uploading a time-ordered slice of one card's recent transactions
+(the last row will have real in-batch history) demonstrates the model at
+its best.
+
+Run it with:
+```bash
+cd app
+streamlit run app.py
+```
+
+## Deploying to Render
+
+The app is a standard Streamlit web service(), which Render runs as a
+Python web service. Two things make this deployment different from most
+"push a repo, done" cases, and both matter:
+
+1. **The trained model artifacts have to be in the repo.** `models/` is
+   gitignored during development (regenerable, no reason to bloat local
+   git history while iterating), but `app/app.py` loads those files at
+   *runtime* -- there's no training step in the deployment itself. Before
+   your first push for deployment:
+   ```bash
+   du -sh models/*
+   ```
+   If everything's comfortably under 100MB, just commit them (the
+   `.gitignore` in this delivery already stopped excluding `models/` --
+   see the comment there). **If `random_forest.joblib` (or any file) is
+   large** -- plausible, since it's 200 fully-grown trees over 1.1M rows
+   with no `max_depth` cap -- you have a few options, roughly in order of
+   effort: (a) retrain it with a `max_depth` cap in `train_baselines.py`
+   to shrink the pickle (small accuracy trade-off, worth re-checking
+   against the leaderboard), (b) use [Git LFS](https://git-lfs.com/) for
+   that one file, or (c) host it externally (e.g. a Hugging Face Hub
+   model repo, or cloud storage) and download it once at container
+   startup instead of committing it. `data/` stays gitignored either way
+   -- the deployed app never needs the raw dataset, only the trained
+   models.
+
+2. **`torch`'s default pip install is enormous** (recent versions pull in
+   several GB of NVIDIA CUDA packages as dependencies, even though
+   Render's web services have no GPU to use them). `requirements-render.txt`
+   (not the main `requirements.txt`, which is for local development and
+   also needs Jupyter/Kaggle/plotting libs) pins the CPU-only build via
+   `--extra-index-url`, and is what both deployment paths below use.
+
+**Option A -- Blueprint (`render.yaml`), one click:**
+1. Push this repo (with `models/` committed) to GitHub.
+2. In the Render dashboard: **New -> Blueprint**, point it at the repo.
+   Render reads `render.yaml` and proposes the service already configured
+   (build/start commands, Python version).
+3. Click **Apply**.
+
+**Option B -- manual dashboard setup** (if you'd rather not use a
+Blueprint, or want to tweak settings as you go):
+1. Push the repo (with `models/` committed) to GitHub.
+2. Render dashboard: **New -> Web Service**, connect the repo.
+3. **Build Command**: `pip install -r requirements-render.txt`
+4. **Start Command**:
+   `streamlit run app/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true`
+5. **Environment**: Python 3 (matches `render.yaml`'s `PYTHON_VERSION: 3.12.2` though any recent Python 3.11/3.12 works).
+6. Pick a plan -- see the RAM note below -- and deploy.
+
+**Plan sizing:** loading five models at once (XGBoost, Random Forest, FNN,
+LSTM, meta-learner) plus Streamlit's own overhead can exceed the free/
+starter tier's 512MB RAM, especially if `random_forest.joblib` is large.
+If the deploy builds fine but the service repeatedly restarts or the logs
+show it being killed (look for "out of memory" / a sudden exit with no
+Python traceback), that's the symptom -- bump to Render's "standard" plan
+(2GB) rather than debugging the app code, which isn't the problem.
+
+**Cold starts:** Render's free tier spins a service down after a period
+of inactivity and takes 30-60s to wake back up on the next request.
+
+**After it's live:** open the Render-provided URL(https://fraud-shield-gcxh.onrender.com/) and repeat the same
+smoke test from Milestone 5 -- upload a time-ordered slice of one card's
+transactions from `data/raw/fraudTest.csv` (kept locally; it was never
+committed) and confirm you get sane fraud probabilities back.
+
 
 ## Notes on the dataset
 
 The Kaggle dataset ships as two files, `fraudTrain.csv` and `fraudTest.csv`,
 spanning Jan 2019 – Dec 2020 in total (simulated data via the Sparkov
 generator). We use them as the given train/test split and only carve a
-validation set out of `fraudTrain.csv` (see `src/data_split.py`) — see
-that script's printed output for whether the two files overlap in time.
+validation set out of `fraudTrain.csv` (see `src/data_split.py`).
 
 Key raw columns: `trans_date_trans_time`, `cc_num`, `merchant`, `category`,
 `amt`, `lat`/`long` (cardholder), `merch_lat`/`merch_long` (merchant),
@@ -201,8 +292,50 @@ Key raw columns: `trans_date_trans_time`, `cc_num`, `merchant`, `category`,
 
 ## Final test evaluation
 
-`data/processed/test.csv` (built from `fraudTest.csv`, untouched since
-Milestone 1) stays a true holdout: run it through a chosen model exactly
-once, after a final approach is picked (once the hybrid's real results are
-in and Milestone 5's app is working), not before and not repeatedly --
-otherwise test stops being an honest measure of generalization.
+`src/evaluate_final_test.py` scores all five models (the four base models
+and the hybrid) against `data/processed/test.csv` -- untouched since
+Milestone 1 -- exactly once. It reports each model's standard metrics
+(ROC-AUC, PR-AUC) plus performance at the threshold **chosen on validation**
+(the one that would actually ship), re-tuning a threshold on test only as a
+separate, clearly-labeled reference number -- never the reported "real"
+result, since tuning on test would leak it into the decision it's supposed
+to check. It also prints each model's validation PR-AUC next to its test
+PR-AUC so a meaningful generalization gap is easy to spot.
+
+Run it once, after the final model is chosen:
+```bash
+python src/evaluate_final_test.py
+```
+
+
+### Final results (run once, against `fraudTest.csv`)
+
+| Model | Test PR-AUC | Val PR-AUC | Gap | Shipped precision | Shipped recall | Shipped F1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Hybrid** | **0.9731** | 0.9829 | -0.0098 | 0.9541 | 0.9203 | **0.9369** |
+| XGBoost (tuned) | 0.9680 | 0.9760 | -0.0080 | 0.9230 | 0.9161 | 0.9195 |
+| LSTM | 0.9470 | 0.9804 | -0.0334 | 0.9278 | 0.8984 | 0.9128 |
+| Random Forest | 0.9444 | 0.9617 | -0.0173 | 0.9183 | 0.8704 | 0.8937 |
+| FNN | 0.9300 | 0.9561 | -0.0261 | 0.8948 | 0.8527 | 0.8732 |
+
+"Shipped" precision/recall/F1 are at each model's **validation-chosen**
+threshold -- the one that would actually deploy -- never re-tuned on test.
+
+**The hybrid holds its lead on genuinely unseen data**: best test PR-AUC
+(0.9731) and best F1 (0.9369) of any model, confirming it as the right
+final choice. Its validation-to-test gap (-0.0098) is also among the
+smallest of the five, meaning its validation score was a reliable
+predictor of real-world performance rather than an artifact of
+overfitting to validation specifically.
+
+**Worth flagging explicitly: the LSTM generalized noticeably worse than
+its validation score suggested** -- a -0.0334 PR-AUC gap, more than 3x
+the hybrid's, dropping it from the #2 model on validation to #4 on test
+(behind XGBoost, just ahead of Random Forest). This is a legitimate,
+reportable result, not a discrepancy to explain away: the LSTM's
+sequence-based features may be more sensitive to the specific transaction
+patterns present in `fraudTrain.csv`'s validation tail than the flatter,
+more general features the tree ensembles and hybrid rely on. It
+reinforces the value of the hybrid over deploying the LSTM alone -- the
+ensemble's blend proved more robust exactly where its strongest single
+component proved less so.
