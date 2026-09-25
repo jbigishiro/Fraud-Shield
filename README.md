@@ -91,7 +91,7 @@ to use on train, val, and test alike:
   against that card's own historical mean/std (both computed on strictly
   prior transactions via `shift(1).expanding()`).
 
-## Results so far
+## Results against validation set(val.csv)
 
 All metrics below are on the **validation set** (never on `fraudTest.csv`,
 which stays untouched until a final model is chosen -- see "Final test
@@ -146,7 +146,7 @@ model and doesn't reflect precision/recall trade-offs the way PR-AUC does.
   interaction in the engineered features (velocity x deviation x
   category, etc.), and the hybrid improves further still on top of them.
 
-## Milestone 4c: hybrid framework (stacking ensemble)
+## Hybrid framework (stacking ensemble)
 
 `train_hybrid.py` combines all four base models (`xgboost_tuned`,
 `random_forest`, `fnn`, `lstm`) via a Logistic Regression meta-learner
@@ -167,13 +167,13 @@ would let it overfit trivially. Instead:
   later, or the web app) and saved to
   `models/hybrid_meta_learner.joblib`, but its own predictions on
   validation are *not* reported as a metric, since that would be
-  circular. This is the meta-learner the web app (Milestone 5) and the
+  circular. This is the meta-learner the web app  and the
   final test-set evaluation will use.
 
-This is now the project's **final chosen model** for Milestone 5 and the
+This is now the project's **final chosen model** for  and the
 final test evaluation, unless later work changes that.
 
-## Milestone 5: Streamlit web app
+##  Streamlit web app
 
 `app/app.py` loads all five saved artifacts (the four base models plus the
 hybrid meta-learner) and lets you score transactions two ways:
@@ -274,7 +274,7 @@ Python traceback), that's the symptom -- bump to Render's "standard" plan
 of inactivity and takes 30-60s to wake back up on the next request.
 
 **After it's live:** open the Render-provided URL(https://fraud-shield-gcxh.onrender.com/) and repeat the same
-smoke test from Milestone 5 -- upload a time-ordered slice of one card's
+smoke test, upload a time-ordered slice of one card's
 transactions from `data/raw/fraudTest.csv` (kept locally; it was never
 committed) and confirm you get sane fraud probabilities back.
 
@@ -293,8 +293,7 @@ Key raw columns: `trans_date_trans_time`, `cc_num`, `merchant`, `category`,
 ## Final test evaluation
 
 `src/evaluate_final_test.py` scores all five models (the four base models
-and the hybrid) against `data/processed/test.csv` -- untouched since
-Milestone 1 -- exactly once. It reports each model's standard metrics
+and the hybrid) against `data/processed/test.csv` . It reports each model's standard metrics
 (ROC-AUC, PR-AUC) plus performance at the threshold **chosen on validation**
 (the one that would actually ship), re-tuning a threshold on test only as a
 separate, clearly-labeled reference number -- never the reported "real"
